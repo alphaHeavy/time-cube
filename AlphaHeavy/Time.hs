@@ -7,6 +7,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverlappingInstances #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -21,6 +22,10 @@ module AlphaHeavy.Time
   , DateTimeLens
   , TimeZone(..)
   , TimeZoneOffset(..)
+
+  -- * Raw date components
+  , DateTimeComponents(..)
+  , DateTimeStruct(..)
 
   -- * System time
   , getCurrentDateTimeNanos
@@ -290,7 +295,10 @@ deriving instance NFData (Pico tz)
 data TimeZone = UTC | LocalTime -- NamedTimeZone String
 
 newtype UnixTime (t :: TimeZone)      = UnixTime Int64 deriving (Num,Ord,Eq,NFData)
+deriving instance Show (UnixTime tz)
+
 newtype UnixTimeNanos (t :: TimeZone) = UnixTimeNanos (Int64, Int32) deriving (Ord,Eq,NFData)
+deriving instance Show (UnixTimeNanos tz)
 
 newtype JavaTime (t :: TimeZone)      = JavaTime Int64
 
@@ -308,58 +316,97 @@ dateTimeLens
   -> DateTimeLens f tz a
 dateTimeLens g s = A.lens (Kleisli g) (Kleisli (uncurry s))
 
-class DateComponents f tz where
+class DateTimeComponents f tz where
   unpack :: f tz -> DateTimeStruct tz
   pack   :: DateTimeStruct tz -> f tz
 
-instance DateComponents UnixTimeNanos tz where
-  unpack = unixTimeNanosToStruct
-  -- toStruct = unixTimeNanosToStruct
+instance DateTimeComponents UnixTimeNanos tz where
+  unpack = unpackUnixTimeNanos
+  pack   = packUnixTimeNanos
+
+instance DateTimeComponents UnixTime tz where
+  unpack = unpackUnixTime
+  pack   = packUnixTime
 
 runDateTimeLens
-  :: forall f a tz . DateComponents f tz
+  :: forall f a tz . DateTimeComponents f tz
   => Kleisli (State (DateTimeStruct tz)) (f tz) a
   -> f tz
   -> a
 runDateTimeLens l f = evalState (runKleisli l f) (unpack f)
 
 get
-  :: DateComponents f tz
-  => DateTimeLens f tz a -- Lens (Kleisli (State (DateTimeStruct tz))) (f tz) a
+  :: DateTimeComponents f tz
+  => DateTimeLens f tz a
   -> f tz
   -> a tz
 get = runDateTimeLens . A.get
 
 set
-  :: DateComponents f tz
+  :: DateTimeComponents f tz
   => DateTimeLens f tz a
   -> a tz
   -> f tz
   -> f tz
 set l v = runDateTimeLens (A.set l . arr (v,))
 
-unixTimeNanosToStruct :: UnixTimeNanos tz -> DateTimeStruct tz
-unixTimeNanosToStruct (UnixTimeNanos (s, ns)) = val where
-  val    = DateTimeStruct year month day hour minute second nano
+-- TODO: allow timezone conversions
+convertDateTime
+  :: (DateTimeComponents f tz, DateTimeComponents f' tz)
+  => f  tz
+  -> f' tz
+convertDateTime = pack . unpack
+
+unpackUnixTimeNanos :: UnixTimeNanos tz -> DateTimeStruct tz
+unpackUnixTimeNanos (UnixTimeNanos (s, ns)) = val' where
+  val'   = val{dt_nanos = nano}
+  val    = unpackUnixTime (UnixTime s)
+  nano   = Nanos   . fromIntegral $ ns
+
+packUnixTimeNanos :: DateTimeStruct tz -> UnixTimeNanos tz
+packUnixTimeNanos dts@DateTimeStruct{..} = val' where
+  val'       = UnixTimeNanos (s, fromIntegral ns)
+  UnixTime s = packUnixTime dts
+  Nanos ns   = dt_nanos
+
+unpackUnixTime :: UnixTime tz -> DateTimeStruct tz
+unpackUnixTime (UnixTime s) = val where
+  val    = DateTimeStruct year month day hour minute second 0
   year   = Years   . fromIntegral $ c'tm'tm_year tm + 1900
   month  = toEnum  . fromIntegral $ c'tm'tm_mon  tm + 1
   day    = Day     . fromIntegral $ c'tm'tm_mday tm
   hour   = Hours   . fromIntegral $ c'tm'tm_hour tm
   minute = Minutes . fromIntegral $ c'tm'tm_min  tm
   second = Seconds . fromIntegral $ c'tm'tm_sec  tm
-  nano   = Nanos   . fromIntegral $ ns
   tm     = convert (fromIntegral s :: CTime)
+
+packUnixTime :: DateTimeStruct tz -> UnixTime tz
+packUnixTime DateTimeStruct{..} = UnixTime (fromIntegral val') where
+  val' :: Int
+  val' = convert val
+  val :: CTime
+  val = convert C'tm
+    { c'tm'tm_year   = fromIntegral $ getYear   dt_year  - 1900
+    , c'tm'tm_mon    = fromIntegral $ fromEnum  dt_month - 1
+    , c'tm'tm_mday   = fromIntegral $ getDay    dt_day
+    , c'tm'tm_hour   = fromIntegral $ getHour   dt_hour
+    , c'tm'tm_min    = fromIntegral $ getMinute dt_minute
+    , c'tm'tm_sec    = fromIntegral $ getSecond dt_second
+    , c'tm'tm_wday   = 0
+    , c'tm'tm_yday   = 0
+    , c'tm'tm_isdst  = 0
+    , c'tm'tm_gmtoff = 0
+    , c'tm'tm_zone   = nullPtr
+    }
 
 type DateTimeLens a (tz :: TimeZone) b =
   A.Lens (Kleisli (State (DateTimeStruct tz))) (a tz) (b tz)
 
 class DateTime (a :: TimeZone -> *) (tz :: TimeZone) (b :: TimeZone -> *) where
-  -- datePart :: a b :~> c b
-  -- datePart :: A.Lens (Kleisli (State (DateTimeStruct tz))) (a tz) (b tz)
   datePart :: DateTimeLens a tz b
 
-instance DateTime UnixTimeNanos tz Year where
-  datePart = dateTimeLens g s where
+instance DateTimeComponents base tz => DateTime base tz Year where
+  datePart  = dateTimeLens g s where
     g _     = State.gets dt_year
     s val _ = do
       s <- State.get
@@ -367,20 +414,74 @@ instance DateTime UnixTimeNanos tz Year where
       State.put s'
       return (pack s')
 
-{-
-instance DateTime UnixTimeNanos tz Month where
-  datePart = dateTimeLens g s where
+instance DateTimeComponents base tz => DateTime base tz Month where
+  datePart  = dateTimeLens g s where
     g _     = State.gets dt_month
     s val r = do
-      State.modify (\ s -> s{dt_month = val})
-      return r
+      s <- State.get
+      let s' = s{dt_month = val}
+      State.put s'
+      return (pack s')
 
-instance DateTime UnixTimeNanos tz Day where
-  datePart = dateTimeLens g s where
-   g _     = State.gets dt_day
-   s val r = do
-     State.modify (\ s -> s{dt_day = val})
-     return r
+instance DateTimeComponents base tz => DateTime base tz Day where
+  datePart  = dateTimeLens g s where
+    g _     = State.gets dt_day
+    s val r = do
+      s <- State.get
+      let s' = s{dt_day = val}
+      State.put s'
+      return (pack s')
+
+instance DateTimeComponents base tz => DateTime base tz Hour where
+  datePart  = dateTimeLens g s where
+    g _     = State.gets dt_hour
+    s val r = do
+      s <- State.get
+      let s' = s{dt_hour = val}
+      State.put s'
+      return (pack s')
+
+instance DateTimeComponents base tz => DateTime base tz Minute where
+  datePart  = dateTimeLens g s where
+    g _     = State.gets dt_minute
+    s val r = do
+      s <- State.get
+      let s' = s{dt_minute = val}
+      State.put s'
+      return (pack s')
+
+instance DateTimeComponents base tz => DateTime base tz Second where
+  datePart  = dateTimeLens g s where
+    g _     = State.gets dt_second
+    s val r = do
+      s <- State.get
+      let s' = s{dt_second = val}
+      State.put s'
+      return (pack s')
+
+instance DateTimeComponents base tz => DateTime base tz Nano where
+  datePart  = dateTimeLens g s where
+    g _     = State.gets dt_nanos
+    s val r = do
+      s <- State.get
+      let s' = s{dt_nanos = val}
+      State.put s'
+      return (pack s')
+
+{-
+instance forall base tz . DateTimeComponents base tz => DateTime base tz Milli where
+  datePart  = dateTimeLens g s where
+    -- g :: base tz -> State (DateTimeStruct tz) (Milli tz)
+    g _     = do
+      Nanos ns <- State.gets dt_nanos
+      return $! Millis (ns `div` 1000000)
+      -- fmap (\ (Nanos x) -> Millis (x `div` 1000000)) (State.gets dt_nanos)
+
+    s (Millis val) r = do
+      s <- State.get
+      let s' = s{dt_nanos = Nanos (val * 1000000)}
+      State.put s'
+      return (pack s')
 -}
 
 instance DateTime Year tz Month where
@@ -419,14 +520,6 @@ instance DateTime Hour tz Minute where
    s val r = do
      State.modify (\ s -> s{dt_minute = val})
      return r
-
-instance DateTime UnixTimeNanos tz Second where
-  datePart = dateTimeLens g s where
-   g (UnixTimeNanos (s, _)) = return (Seconds (fromIntegral s))
-   s val r = do
-     undefined
-     -- State.modify (\ s -> s{dt_second = val})
-     -- return r
 
 instance DateTime Minute tz Second where
   datePart = dateTimeLens g s where

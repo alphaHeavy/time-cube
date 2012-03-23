@@ -117,9 +117,9 @@ import Data.Label.Abstract as A
 -- import Data.Label.Maybe as DlM
 import Data.Data
 import Data.Maybe (fromJust)
-import qualified Data.Time as HT
-import Data.Time.LocalTime.TimeZone.Olson (getTimeZoneSeriesFromOlsonFile)
-import Data.Time.LocalTime.TimeZone.Series (localTimeToUTC',TimeZoneSeries, utcToLocalTime')
+-- import qualified Data.Time as HT
+-- import Data.Time.LocalTime.TimeZone.Olson (getTimeZoneSeriesFromOlsonFile)
+-- import Data.Time.LocalTime.TimeZone.Series (localTimeToUTC',TimeZoneSeries, utcToLocalTime')
 import Foreign (Ptr,nullPtr,alloca,with,peek)
 import Foreign.C.Types
 import System.IO.Unsafe (unsafePerformIO)

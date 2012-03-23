@@ -68,32 +68,7 @@ module AlphaHeavy.Time
 
 {-
 module AlphaHeavy.Time (
-    Day(..)
-  , Hours(..)
-  , Minutes(..)
-  , Seconds(..)
-  , Millis(..)
-  , Month(..)
-  , Week(..)
-  , Year(..)
-  , Century(..)
-  , Era(..)
-  , Nanos(..)
-  , DayOfWeek(..)
-
-  , Chronology
-  , TimeZone(..)
-  , Date(..)
-  , Time(..)
-  , DateTime(..)
   , DateTimeMath(..)
-
-  , UTCDate(..)
-  , UTCTime(..)
-  , UTCDateTime(..)
-  , UTCDateTimeNanos(..)
-
-  , UTCDateTimeStruct(..)
 
   , addDateTime
   , addMillis
@@ -543,33 +518,7 @@ instance DateTime Second tz Milli where
 -}
 
 {-
-instance DateTime UnixTimeNanos tz Hour where
-  datePart = dateTimeLens g s where
-   g _     = State.gets dt_hour
-   s val r = do
-     State.modify (\ s -> s{dt_hour = val})
-     return r
 
-instance DateTime UnixTimeNanos tz Minute where
-  datePart = dateTimeLens g s where
-   g _     = State.gets dt_minute
-   s val r = do
-     State.modify (\ s -> s{dt_minute = val})
-     return r
-
-instance DateTime UnixTimeNanos tz Second where
-  datePart = dateTimeLens g s where
-   g _     = State.gets dt_second
-   s val r = do
-     State.modify (\ s -> s{dt_second = val})
-     return r
-
-instance DateTime UnixTimeNanos tz Milli where
-  datePart = dateTimeLens g s where
-   g _     = State.gets dt_millis
-   s val r = do
-     State.modify (\ s -> s{dt_millis = val})
-     return r
 -}
 
 year
@@ -640,81 +589,10 @@ timeZoneOffset = datePart
 instance DateTime a UTC TimeZoneOffset where
   datePart = dateTimeLens (\ _ -> return (TimeZoneOffset 0)) (\ _ _ -> fail "asdfasdfasdf")
 
-{-
-instance Date UnixTimeNanos tz DateTimeStruct where
-  datePart = DlM.lens (Just . unixTimeNanosToStruct) (\ _ _ -> Nothing)
--}
-
-
-
-{-
-class (Chronology a b) => Date a (b :: TimeZone) where
-  year  :: a b :~> Year
-  month :: a b :~> Month
-  week  :: a b :~> Week
-  day   :: a b :~> Day
-
-class (Chronology a b) => Time a (b :: TimeZone) where
-  hour           :: a b :~> Hours
-  minuteOfDay    :: a b :~> Minutes
-  minute         :: a b :~> Minutes
-  secondOfDay    :: a b :~> Seconds
-  second         :: a b :~> Seconds
-  millisOfDay    :: a b :~> Millis
-  millis         :: a b :~> Millis
-  nanos          :: a b :~> Nanos
-  picos          :: a b :~> Picos
-
-class (Date a b, Time a b, Chronology a b) => DateTime a (b :: TimeZone) where
-  type TimeRep a b :: *
-  type DateRep a b :: *
-
-  date            :: a b :-> DateRep a b
-  time            :: a b :-> TimeRep a b
-
-  toStruct        :: a b -> UTCDateTimeStruct
-  fromStruct      :: UTCDateTimeStruct -> a b
-
-  convertTimeZone :: DateTime a (c :: TimeZone) => a b -> a c
-  convertTimeZone = fromStruct . toStruct
-
-instance Date UnixTime 'UTCTimeZone where
-  century = DlM.lens (\ _ -> Nothing) (\ _ _ -> Nothing)
-  day     = DlM.lens (\ _ -> Nothing) (\ _ _ -> Nothing)
-
--- instance Date UnixTimeNanos 'UTCTimeZone where
-instance Date UnixTimeNanos t where
-  century = DlM.lens (\ _ -> Nothing) (\ _ _ -> Nothing)
-  day     = DlM.lens (\ _ -> Nothing) (\ _ _ -> Nothing)
--}
-
 getCurrentDateTimeNanos :: IO (UnixTimeNanos 'UTC)
 getCurrentDateTimeNanos = do
   C'timeval{c'timeval'tv_sec = sec, c'timeval'tv_usec = ms} <- getTimeOfDay
   return $! UnixTimeNanos (fromIntegral sec, fromIntegral (ms * 1000))
-
-{-
-  century _                               = Century 0
-  day (UTCDateTimeNanos (x,_))            = day (UTCDateTime x)
-  dayOfWeek (UTCDateTimeNanos (x,_))      = dayOfWeek (UTCDateTime x)
-  dayOfYear (UTCDateTimeNanos (x,_))      = dayOfYear (UTCDateTime x)
-  era _                                   = Era 1 -- AD
-  month (UTCDateTimeNanos (x,_))          = month (UTCDateTime x)
-  year (UTCDateTimeNanos (x,_))           = year (UTCDateTime x)
-  yearOfCentury (UTCDateTimeNanos (x,_))  = yearOfCentury (UTCDateTime x)
-  yearOfEra (UTCDateTimeNanos (x,_))      = yearOfEra (UTCDateTime x)
-  weekOfWeekyear (UTCDateTimeNanos (x,_)) = weekOfWeekyear (UTCDateTime x)
-  weekyear (UTCDateTimeNanos (x,_))       = weekyear (UTCDateTime x)
--}
-
--- http://joda-time.sourceforge.net/field.html
-
-{-
-newtype UTCTime = UTCTime Int64 deriving (Show,Num,Ord,Eq,NFData)
-newtype UTCDate = UTCDate Int64 deriving (Show,Num,Ord,Eq,NFData)
-newtype UTCDateTime = UTCDateTime Int64 deriving (Num,Ord,Eq,NFData)
-newtype UTCDateTimeNanos = UTCDateTimeNanos (Int64, Int32) deriving (Ord,Eq,NFData)
--}
 
 {-
 newtype Duration = Duration Int64 deriving (Show,Num,Eq,NFData)
@@ -1002,20 +880,6 @@ instance Date UTCDateTime where
   -- withMonth (UTCDateTime dt) m       = cT2DT $ withField (fromIntegral dt) (\x -> x { c'tm'tm_mon = fromIntegral $ (fromEnum m - 1) })
   -- withDay (UTCDateTime dt) (Day d)   = cT2DT $ withField (fromIntegral dt) (\x -> x { c'tm'tm_mday = fromIntegral d })
 
-instance Time UTCDateTime where
-  hour (UTCDateTime x)        = Hour $ extract c'tm'tm_hour x
-  millisOfDay (UTCDateTime _) = error "millisOfDay nyi"
-  millis (UTCDateTime _)      = Millis 0
-  minuteOfDay (UTCDateTime x) = Minute $ extract c'tm'tm_min x + (extract c'tm'tm_hour x * 60)
-  minute (UTCDateTime x)      = Minute $ extract c'tm'tm_min x
-  secondOfDay tm              = Second $ s + m * 60 + h * 3600
-    where UTCDateTimeStruct { dt_second = Second s, dt_minute = Minute m, dt_hour = Hour h } = toStruct tm
-  second (UTCDateTime x)      = Second $ extract c'tm'tm_sec x
-  nanoseconds (UTCDateTime _) = Nanos 0
-
-  -- withHour (UTCDateTime dt) (Hour h)     = cT2DT $ withField (fromIntegral dt) (\x -> x { c'tm'tm_hour = fromIntegral h })
-  -- withMinute (UTCDateTime dt) (Minute m) = cT2DT $ withField (fromIntegral dt) (\x -> x { c'tm'tm_min = fromIntegral m })
-  -- withSecond (UTCDateTime dt) (Second s) = cT2DT $ withField (fromIntegral dt) (\x -> x { c'tm'tm_sec = fromIntegral s })
 
 instance Date UTCDateTimeNanos where
   century _                               = Century 0
@@ -1075,8 +939,4 @@ instance DateTime UTCDateTimeNanos where
   fromStruct UTCDateTimeStruct { dt_millis=ms, dt_second=s, dt_minute=m, dt_hour=h, dt_day=d, dt_month=mon, dt_year=y } =
     createUTCDateTimeNanos ms s m h d mon y
 
-instance Chronology UTCTime
-instance Chronology UTCDate
-instance Chronology UTCDateTime
-instance Chronology UTCDateTimeNanos
 -}

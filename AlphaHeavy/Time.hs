@@ -43,8 +43,10 @@ module AlphaHeavy.Time
   -- * Date sections
   , Year(..)
   , Month(..)
+  , MonthOfYear(..)
   , Week(..)
   , Day(..)
+  , DayOfWeek(..)
   , Hour(..)
   , Minute(..)
   , Second(..)
@@ -134,23 +136,31 @@ data DateTimeStruct tz = DateTimeStruct
   , dt_minute :: Minute tz
   , dt_second :: Second tz
   , dt_nanos  :: Nano tz
-  } -- deriving -- (Eq,Show)
+  }
 
-newtype Era     tz = Era     {getEra     :: Int32} -- deriving (Eq,Ord,Num,Real,Enum,Integral,Show,Read,Data,Typeable,NFData)
-newtype Century tz = Century {getCentury :: Int32} -- deriving (Eq,Ord,Num,Real,Integral,Enum,Show,Read,Data,Typeable,NFData)
-newtype Week    tz = Weeks   {getWeek    :: Int32} -- deriving (Eq,Ord,Num,Real,Enum,Integral,Show,Read,Data,Typeable,NFData)
+deriving instance Show (DateTimeStruct tz)
+
+newtype Era     tz = Era     {getEra     :: Int32}
+newtype Century tz = Century {getCentury :: Int32}
+newtype Week    tz = Weeks   {getWeek    :: Int32}
 
 newtype TimeZoneOffset tz = TimeZoneOffset {getTimeZoneOffset :: Int32}
 deriving instance Show   (TimeZoneOffset tz)
 deriving instance NFData (TimeZoneOffset tz)
 
-newtype Year tz = Years {getYear :: Int32} -- deriving (Eq,Ord,Num,Real,Integral,Enum,Show,Read,Data,Typeable,NFData)
+newtype Year tz = Years {getYear :: Int32}
 deriving instance Read   (Year tz)
 deriving instance Show   (Year tz)
 deriving instance Num    (Year tz)
 deriving instance NFData (Year tz)
 
-data Month tz
+newtype Month tz = Months {getMonth :: Int32}
+deriving instance Read   (Month tz)
+deriving instance Show   (Month tz)
+deriving instance Num    (Month tz)
+deriving instance NFData (Month tz)
+
+data MonthOfYear tz
   = January
   | February
   | March
@@ -164,15 +174,15 @@ data Month tz
   | November
   | December
 
-deriving instance Eq     (Month tz)
-deriving instance Ord    (Month tz)
-deriving instance Read   (Month tz)
-deriving instance Show   (Month tz)
+deriving instance Eq     (MonthOfYear tz)
+deriving instance Ord    (MonthOfYear tz)
+deriving instance Read   (MonthOfYear tz)
+deriving instance Show   (MonthOfYear tz)
 
-instance NFData (Month tz) where
+instance NFData (MonthOfYear tz) where
   rnf x = x `seq` ()
 
-instance Enum (Month tz) where
+instance Enum (MonthOfYear tz) where
   toEnum 1 = January
   toEnum 2 = February
   toEnum 3 = March
@@ -199,11 +209,11 @@ instance Enum (Month tz) where
   fromEnum November = 11
   fromEnum December = 12
 
-instance Bounded (Month tz) where
+instance Bounded (MonthOfYear tz) where
   minBound = January
   maxBound = December
 
-newtype Day tz = Day {getDay :: Int32} -- deriving (Eq,Ord,Num,Real,Enum,Integral,Show,Read,Data,Typeable,NFData)
+newtype Day tz = Day {getDay :: Int32}
 deriving instance Read   (Day tz)
 deriving instance Show   (Day tz)
 deriving instance Num    (Day tz)
@@ -259,14 +269,6 @@ deriving instance Show   (Pico tz)
 deriving instance Num    (Pico tz)
 deriving instance NFData (Pico tz)
 
--- class Chronology c (t :: TimeZone)
-
--- class TimeZone a where
-  -- offset :: a -> Second
-
--- instance TimeZone a where
-  -- offset _ = Second 0
-
 data TimeZone = UTC | LocalTime -- NamedTimeZone String
 
 newtype UnixTime (t :: TimeZone)      = UnixTime Int64 deriving (Num,Ord,Eq,NFData)
@@ -279,15 +281,9 @@ newtype JavaTime (t :: TimeZone)      = JavaTime Int64
 
 newtype JulianDate (t :: TimeZone)    = JulianDate Int64
 
--- instance Chronology UnixTime t
--- instance Chronology UnixTimeNanos t
-
--- type (f, tz) :~> a = A.Lens (Kleisli (State (DateTimeStruct tz))) f a
-
 dateTimeLens
   :: (f tz -> State (DateTimeStruct tz) (a tz))
   -> (a tz -> f tz -> State (DateTimeStruct tz) (f tz))
-  -- -> A.Lens (Kleisli (State (DateTimeStruct tz))) f a
   -> DateTimeLens f tz a
 dateTimeLens g s = A.lens (Kleisli g) (Kleisli (uncurry s))
 
@@ -348,7 +344,7 @@ unpackUnixTime :: UnixTime tz -> DateTimeStruct tz
 unpackUnixTime (UnixTime s) = val where
   val    = DateTimeStruct year month day hour minute second 0
   year   = Years   . fromIntegral $ c'tm'tm_year tm + 1900
-  month  = toEnum  . fromIntegral $ c'tm'tm_mon  tm + 1
+  month  = Months  . fromIntegral $ c'tm'tm_mon  tm + 1
   day    = Day     . fromIntegral $ c'tm'tm_mday tm
   hour   = Hours   . fromIntegral $ c'tm'tm_hour tm
   minute = Minutes . fromIntegral $ c'tm'tm_min  tm
@@ -362,7 +358,7 @@ packUnixTime DateTimeStruct{..} = UnixTime (fromIntegral val') where
   val :: CTime
   val = convert C'tm
     { c'tm'tm_year   = fromIntegral $ getYear   dt_year  - 1900
-    , c'tm'tm_mon    = fromIntegral $ fromEnum  dt_month - 1
+    , c'tm'tm_mon    = fromIntegral $ getMonth  dt_month - 1
     , c'tm'tm_mday   = fromIntegral $ getDay    dt_day
     , c'tm'tm_hour   = fromIntegral $ getHour   dt_hour
     , c'tm'tm_min    = fromIntegral $ getMinute dt_minute
@@ -395,6 +391,16 @@ instance DateTimeComponents base tz => DateTime base tz Month where
     s val r = do
       s <- State.get
       let s' = s{dt_month = val}
+      State.put s'
+      return (pack s')
+
+instance DateTimeComponents base tz => DateTime base tz MonthOfYear where
+  datePart  = dateTimeLens g s where
+    flog x  = toEnum . fromIntegral $ getMonth (x :: Month tz)
+    g _     = fmap flog $ State.gets dt_month
+    s val r = do
+      s <- State.get
+      let s' = s{dt_month = Months (fromIntegral $ fromEnum val)}
       State.put s'
       return (pack s')
 
@@ -443,27 +449,31 @@ instance DateTimeComponents base tz => DateTime base tz Nano where
       State.put s'
       return (pack s')
 
-{-
 instance forall base tz . DateTimeComponents base tz => DateTime base tz Milli where
   datePart  = dateTimeLens g s where
-    -- g :: base tz -> State (DateTimeStruct tz) (Milli tz)
-    g _     = do
-      Nanos ns <- State.gets dt_nanos
-      return $! Millis (ns `div` 1000000)
-      -- fmap (\ (Nanos x) -> Millis (x `div` 1000000)) (State.gets dt_nanos)
-
+    flog x  = Millis . fromIntegral $ (getNanos (x :: Nano tz) `div` 1000000)
+    g _     = fmap flog $ State.gets dt_nanos
     s (Millis val) r = do
       s <- State.get
       let s' = s{dt_nanos = Nanos (val * 1000000)}
       State.put s'
       return (pack s')
--}
 
 instance DateTime Year tz Month where
   datePart = dateTimeLens g s where
     g _     = State.gets dt_month
     s val r = do
       State.modify (\ s -> s{dt_month = val})
+      return r
+
+instance DateTime Year tz MonthOfYear where
+  datePart = dateTimeLens g s where
+    flog x  = toEnum . fromIntegral $ getMonth (x :: Month tz)
+    g _     = fmap flog $ State.gets dt_month
+    s val r = do
+      let month :: Month tz
+          month = Months . fromIntegral $ fromEnum val
+      State.modify (\ s -> s{dt_month = month})
       return r
 
 {-
@@ -532,9 +542,9 @@ month
 month = datePart
 
 monthOfYear
-  :: DateTime a tz Year
-  => DateTimeLens a tz Month
-monthOfYear = month . year
+  :: DateTime a tz MonthOfYear
+  => DateTimeLens a tz MonthOfYear
+monthOfYear = datePart
 
 week
   :: DateTime a tz Week

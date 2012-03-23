@@ -282,51 +282,54 @@ newtype JavaTime (t :: TimeZone)      = JavaTime Int64
 newtype JulianDate (t :: TimeZone)    = JulianDate Int64
 
 dateTimeLens
-  :: (f tz -> State (DateTimeStruct tz) (a tz))
-  -> (a tz -> f tz -> State (DateTimeStruct tz) (f tz))
-  -> DateTimeLens f tz a
+  :: (f -> m a)
+  -> (a -> f -> m f)
+  -> Lens (Kleisli m) f a
 dateTimeLens g s = A.lens (Kleisli g) (Kleisli (uncurry s))
 
-class DateTimeComponents f tz where
-  unpack :: f tz -> DateTimeStruct tz
-  pack   :: DateTimeStruct tz -> f tz
+class DateTimeComponents f where
+  type DateTimeComponentsTimeZone f :: TimeZone
+  unpack :: f -> DateTimeStruct (DateTimeComponentsTimeZone f)
+  pack   :: DateTimeStruct (DateTimeComponentsTimeZone f) -> f
 
-instance DateTimeComponents UnixTimeNanos tz where
+instance DateTimeComponents (UnixTimeNanos tz) where
+  type DateTimeComponentsTimeZone (UnixTimeNanos tz) = tz
   unpack = unpackUnixTimeNanos
   pack   = packUnixTimeNanos
 
-instance DateTimeComponents UnixTime tz where
+instance DateTimeComponents (UnixTime tz) where
+  type DateTimeComponentsTimeZone (UnixTime tz) = tz
   unpack = unpackUnixTime
   pack   = packUnixTime
 
 runDateTimeLens
-  :: forall f a tz . DateTimeComponents f tz
-  => Kleisli (State (DateTimeStruct tz)) (f tz) a
-  -> f tz
+  :: DateTimeComponents f
+  => Kleisli (State (DateTimeStruct (DateTimeComponentsTimeZone f))) f a
+  -> f
   -> a
 runDateTimeLens l f = evalState (runKleisli l f) (unpack f)
 
 get
-  :: DateTimeComponents f tz
-  => DateTimeLens f tz a
-  -> f tz
-  -> a tz
+  :: DateTimeComponents f
+  => Lens (Kleisli (State (DateTimeStruct (DateTimeComponentsTimeZone f)))) f a
+  -> f
+  -> a
 get = runDateTimeLens . A.get
 
 set
-  :: DateTimeComponents f tz
-  => DateTimeLens f tz a
-  -> a tz
-  -> f tz
-  -> f tz
+  :: DateTimeComponents f
+  => Lens (Kleisli (State (DateTimeStruct (DateTimeComponentsTimeZone f)))) f a
+  -> a
+  -> f
+  -> f
 set l v = runDateTimeLens (A.set l . arr (v,))
 
 -- TODO: allow timezone conversions
-convertDateTime
-  :: (DateTimeComponents f tz, DateTimeComponents f' tz)
-  => f  tz
-  -> f' tz
-convertDateTime = pack . unpack
+-- convertDateTime
+  -- :: (DateTimeComponents (f tz), DateTimeComponents (f' tz))
+  -- => f  tz
+  -- -> f' tz
+-- convertDateTime = pack . unpack
 
 unpackUnixTimeNanos :: UnixTimeNanos tz -> DateTimeStruct tz
 unpackUnixTimeNanos (UnixTimeNanos (s, ns)) = val' where
@@ -370,13 +373,15 @@ packUnixTime DateTimeStruct{..} = UnixTime (fromIntegral val') where
     , c'tm'tm_zone   = nullPtr
     }
 
-type DateTimeLens a (tz :: TimeZone) b =
-  A.Lens (Kleisli (State (DateTimeStruct tz))) (a tz) (b tz)
+type DateTimeLens a b =
+  A.Lens (Kleisli (State (DateTimeStruct (DateTimeZone a b)))) a b
 
-class DateTime (a :: TimeZone -> *) (tz :: TimeZone) (b :: TimeZone -> *) where
-  datePart :: DateTimeLens a tz b
+class DateTime a b where
+  type DateTimeZone a b :: TimeZone
+  datePart :: DateTimeLens a b
 
-instance DateTimeComponents base tz => DateTime base tz Year where
+instance (DateTimeComponents (base (tz :: TimeZone)), DateTimeComponentsTimeZone (base tz) ~ tz) => DateTime (base tz) (Year tz) where
+  type DateTimeZone (base tz) (Year tz) = tz
   datePart  = dateTimeLens g s where
     g _     = State.gets dt_year
     s val _ = do
@@ -385,7 +390,8 @@ instance DateTimeComponents base tz => DateTime base tz Year where
       State.put s'
       return (pack s')
 
-instance DateTimeComponents base tz => DateTime base tz Month where
+instance (DateTimeComponents (base (tz :: TimeZone)), DateTimeComponentsTimeZone (base tz) ~ tz) => DateTime (base tz) (Month tz) where
+  type DateTimeZone (base tz) (Month tz) = tz
   datePart  = dateTimeLens g s where
     g _     = State.gets dt_month
     s val r = do
@@ -394,7 +400,8 @@ instance DateTimeComponents base tz => DateTime base tz Month where
       State.put s'
       return (pack s')
 
-instance DateTimeComponents base tz => DateTime base tz MonthOfYear where
+instance (DateTimeComponents (base (tz :: TimeZone)), DateTimeComponentsTimeZone (base tz) ~ tz) => DateTime (base tz) (MonthOfYear tz) where
+  type DateTimeZone (base tz) (MonthOfYear tz) = tz
   datePart  = dateTimeLens g s where
     flog x  = toEnum . fromIntegral $ getMonth (x :: Month tz)
     g _     = fmap flog $ State.gets dt_month
@@ -404,7 +411,8 @@ instance DateTimeComponents base tz => DateTime base tz MonthOfYear where
       State.put s'
       return (pack s')
 
-instance DateTimeComponents base tz => DateTime base tz Day where
+instance (DateTimeComponents (base (tz :: TimeZone)), DateTimeComponentsTimeZone (base tz) ~ tz) => DateTime (base tz) (Day tz) where
+  type DateTimeZone (base tz) (Day tz) = tz
   datePart  = dateTimeLens g s where
     g _     = State.gets dt_day
     s val r = do
@@ -413,7 +421,8 @@ instance DateTimeComponents base tz => DateTime base tz Day where
       State.put s'
       return (pack s')
 
-instance DateTimeComponents base tz => DateTime base tz Hour where
+instance (DateTimeComponents (base (tz :: TimeZone)), DateTimeComponentsTimeZone (base tz) ~ tz) => DateTime (base tz) (Hour tz) where
+  type DateTimeZone (base tz) (Hour tz) = tz
   datePart  = dateTimeLens g s where
     g _     = State.gets dt_hour
     s val r = do
@@ -422,7 +431,8 @@ instance DateTimeComponents base tz => DateTime base tz Hour where
       State.put s'
       return (pack s')
 
-instance DateTimeComponents base tz => DateTime base tz Minute where
+instance (DateTimeComponents (base (tz :: TimeZone)), DateTimeComponentsTimeZone (base tz) ~ tz) => DateTime (base tz) (Minute tz) where
+  type DateTimeZone (base tz) (Minute tz) = tz
   datePart  = dateTimeLens g s where
     g _     = State.gets dt_minute
     s val r = do
@@ -431,7 +441,8 @@ instance DateTimeComponents base tz => DateTime base tz Minute where
       State.put s'
       return (pack s')
 
-instance DateTimeComponents base tz => DateTime base tz Second where
+instance (DateTimeComponents (base (tz :: TimeZone)), DateTimeComponentsTimeZone (base tz) ~ tz) => DateTime (base tz) (Second tz) where
+  type DateTimeZone (base tz) (Second tz) = tz
   datePart  = dateTimeLens g s where
     g _     = State.gets dt_second
     s val r = do
@@ -440,7 +451,8 @@ instance DateTimeComponents base tz => DateTime base tz Second where
       State.put s'
       return (pack s')
 
-instance DateTimeComponents base tz => DateTime base tz Nano where
+instance (DateTimeComponents (base (tz :: TimeZone)), DateTimeComponentsTimeZone (base tz) ~ tz) => DateTime (base tz) (Nano tz) where
+  type DateTimeZone (base tz) (Nano tz) = tz
   datePart  = dateTimeLens g s where
     g _     = State.gets dt_nanos
     s val r = do
@@ -449,7 +461,8 @@ instance DateTimeComponents base tz => DateTime base tz Nano where
       State.put s'
       return (pack s')
 
-instance forall base tz . DateTimeComponents base tz => DateTime base tz Milli where
+instance (DateTimeComponents (base (tz :: TimeZone)), DateTimeComponentsTimeZone (base tz) ~ tz) => DateTime (base tz) (Milli tz) where
+  type DateTimeZone (base tz) (Milli tz) = tz
   datePart  = dateTimeLens g s where
     flog x  = Millis . fromIntegral $ (getNanos (x :: Nano tz) `div` 1000000)
     g _     = fmap flog $ State.gets dt_nanos
@@ -459,14 +472,16 @@ instance forall base tz . DateTimeComponents base tz => DateTime base tz Milli w
       State.put s'
       return (pack s')
 
-instance DateTime Year tz Month where
+instance forall (tz :: TimeZone) . DateTime (Year tz) (Month tz) where
+  type DateTimeZone (Year tz) (Month tz) = tz
   datePart = dateTimeLens g s where
     g _     = State.gets dt_month
     s val r = do
       State.modify (\ s -> s{dt_month = val})
       return r
 
-instance DateTime Year tz MonthOfYear where
+instance forall (tz :: TimeZone) . DateTime (Year tz) (MonthOfYear tz) where
+  type DateTimeZone (Year tz) (MonthOfYear tz) = tz
   datePart = dateTimeLens g s where
     flog x  = toEnum . fromIntegral $ getMonth (x :: Month tz)
     g _     = fmap flog $ State.gets dt_month
@@ -485,28 +500,32 @@ instance DateTime Year tz Day where
      return r
 -}
 
-instance DateTime Month tz Day where
+instance forall (tz :: TimeZone) . DateTime (Month tz) (Day tz) where
+  type DateTimeZone (Month tz) (Day tz) = tz
   datePart = dateTimeLens g s where
    g _     = State.gets dt_day
    s val r = do
      State.modify (\ s -> s{dt_day = val})
      return r
 
-instance DateTime Day tz Hour where
+instance forall (tz :: TimeZone) . DateTime (Day tz) (Hour tz) where
+  type DateTimeZone (Day tz) (Hour tz) = tz
   datePart = dateTimeLens g s where
    g _     = State.gets dt_hour
    s val r = do
      State.modify (\ s -> s{dt_hour = val})
      return r
 
-instance DateTime Hour tz Minute where
+instance forall (tz :: TimeZone) . DateTime (Hour tz) (Minute tz) where
+  type DateTimeZone (Hour tz) (Minute tz) = tz
   datePart = dateTimeLens g s where
    g _     = State.gets dt_minute
    s val r = do
      State.modify (\ s -> s{dt_minute = val})
      return r
 
-instance DateTime Minute tz Second where
+instance forall (tz :: TimeZone) . DateTime (Minute tz) (Second tz) where
+  type DateTimeZone (Minute tz) (Second tz) = tz
   datePart = dateTimeLens g s where
    g _     = State.gets dt_second
    s val r = do
@@ -532,72 +551,73 @@ instance DateTime Second tz Milli where
 -}
 
 year
-  :: DateTime a tz Year
-  => DateTimeLens a tz Year
+  :: forall a (tz :: TimeZone) . DateTime (a tz) (Year tz)
+  => DateTimeLens (a tz) (Year tz)
+  -- => Lens (Kleisli (State (DateTimeStruct (DateTimeComponentsTimeZone (a tz))))) (a tz) (Year tz)
 year = datePart
 
 month
-  :: DateTime a tz Month
-  => DateTimeLens a tz Month
+  :: DateTime (a tz) (Month tz)
+  => DateTimeLens (a tz) (Month tz)
 month = datePart
 
 monthOfYear
-  :: DateTime a tz MonthOfYear
-  => DateTimeLens a tz MonthOfYear
+  :: DateTime (a tz) (MonthOfYear tz)
+  => DateTimeLens (a tz) (MonthOfYear tz)
 monthOfYear = datePart
 
 week
-  :: DateTime a tz Week
-  => DateTimeLens a tz Week
+  :: DateTime (a tz) (Week tz)
+  => DateTimeLens (a tz) (Week tz)
 week = datePart
 
 day
-  :: DateTime a tz Day
-  => DateTimeLens a tz Day
+  :: DateTime (a tz) (Day tz)
+  => DateTimeLens (a tz) (Day tz)
 day = datePart
 
 hour
-  :: DateTime a tz Hour
-  => DateTimeLens a tz Hour
+  :: DateTime (a tz) (Hour tz)
+  => DateTimeLens (a tz) (Hour tz)
 hour = datePart
 
 minute
-  :: DateTime a tz Minute
-  => DateTimeLens a tz Minute
+  :: DateTime (a tz) (Minute tz)
+  => DateTimeLens (a tz) (Minute tz)
 minute = datePart
 
 second
-  :: DateTime a tz Second
-  => DateTimeLens a tz Second
+  :: DateTime (a tz) (Second tz)
+  => DateTimeLens (a tz) (Second tz)
 second = datePart
 
-secondOfDay
-  :: (DateTime a tz Day, DateTime Day tz Second)
-  => DateTimeLens a tz Second
-secondOfDay = second . day
+-- secondOfDay
+  -- :: (DateTime a tz Day, DateTime Day tz Second)
+  -- => DateTimeLens a tz Second
+-- secondOfDay = second . day
 
 milli
-  :: DateTime a tz Milli
-  => DateTimeLens a tz Milli
+  :: DateTime (a tz) (Milli tz)
+  => DateTimeLens (a tz) (Milli tz)
 milli = datePart
 
 nano
-  :: DateTime a tz Nano
-  => DateTimeLens a tz Nano
+  :: DateTime a (Nano tz)
+  => DateTimeLens a (Nano tz)
 nano = datePart
 
 pico
-  :: DateTime a tz Pico
-  => DateTimeLens a tz Pico
+  :: DateTime (a tz) (Pico tz)
+  => DateTimeLens (a tz) (Pico tz)
 pico = datePart
 
 timeZoneOffset
-  :: DateTime a tz TimeZoneOffset
-  => DateTimeLens a tz TimeZoneOffset
+  :: DateTime (a tz) (TimeZoneOffset tz)
+  => DateTimeLens (a tz) (TimeZoneOffset tz)
 timeZoneOffset = datePart
 
-instance DateTime a UTC TimeZoneOffset where
-  datePart = dateTimeLens (\ _ -> return (TimeZoneOffset 0)) (\ _ _ -> fail "asdfasdfasdf")
+-- instance DateTime a UTC TimeZoneOffset where
+  -- datePart = dateTimeLens (\ _ -> return (TimeZoneOffset 0)) (\ _ _ -> fail "asdfasdfasdf")
 
 getCurrentDateTimeNanos :: IO (UnixTimeNanos 'UTC)
 getCurrentDateTimeNanos = do

@@ -273,7 +273,7 @@ deriving instance Show   (Nano tz)
 deriving instance Num    (Nano tz)
 deriving instance NFData (Nano tz)
 
-newtype Pico tz = Picos {getPicos :: Integer}
+newtype Pico tz = Picos {getPicos :: Int64}
 deriving instance Read   (Pico tz)
 deriving instance Show   (Pico tz)
 deriving instance Num    (Pico tz)
@@ -308,30 +308,30 @@ dateTimeLens
   -> DateTimeLens f tz a
 dateTimeLens g s = A.lens (Kleisli g) (Kleisli (uncurry s))
 
-class X f tz where
-  toStruct :: f tz -> DateTimeStruct tz
-  fromStruct :: DateTimeStruct tz -> f tz
+class DateComponents f tz where
+  unpack :: f tz -> DateTimeStruct tz
+  pack   :: DateTimeStruct tz -> f tz
 
-instance X UnixTimeNanos tz where
-  toStruct = unixTimeNanosToStruct
+instance DateComponents UnixTimeNanos tz where
+  unpack = unixTimeNanosToStruct
   -- toStruct = unixTimeNanosToStruct
 
 runDateTimeLens
-  :: forall f a tz . X f tz
+  :: forall f a tz . DateComponents f tz
   => Kleisli (State (DateTimeStruct tz)) (f tz) a
   -> f tz
   -> a
-runDateTimeLens l f = evalState (runKleisli l f) (toStruct f)
+runDateTimeLens l f = evalState (runKleisli l f) (unpack f)
 
 get
-  :: X f tz
+  :: DateComponents f tz
   => DateTimeLens f tz a -- Lens (Kleisli (State (DateTimeStruct tz))) (f tz) a
   -> f tz
   -> a tz
 get = runDateTimeLens . A.get
 
 set
-  :: X f tz
+  :: DateComponents f tz
   => DateTimeLens f tz a
   -> a tz
   -> f tz
@@ -365,7 +365,7 @@ instance DateTime UnixTimeNanos tz Year where
       s <- State.get
       let s' = s{dt_year = val}
       State.put s'
-      return (fromStruct s')
+      return (pack s')
 
 {-
 instance DateTime UnixTimeNanos tz Month where

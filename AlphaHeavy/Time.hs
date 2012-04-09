@@ -25,14 +25,19 @@ module AlphaHeavy.Time
   , DateTimePart(..)
 
   -- * System time
-  , getCurrentDateTimeNanos
+  , getCurrentUnixTime
+  , getCurrentUnixTimeNanos
 
   -- * Lens accessors
+  -- ** Pure
   , AlphaHeavy.Time.get
   , AlphaHeavy.Time.set
+  , AlphaHeavy.Time.modify
 
+  -- ** Monadic
   , AlphaHeavy.Time.getM
   , AlphaHeavy.Time.setM
+  , AlphaHeavy.Time.modifyM
 
   -- * Date storage
   , UnixTime(..)
@@ -94,8 +99,6 @@ module AlphaHeavy.Time (
   , fromUTCToTimezone'
   , loadTimeZone
 
-  , getCurrentDateTime
-  , getCurrentDateTimeNanos
   , javaDateTimeToUTCDateTime
   , dateTimeAsString
   , today
@@ -340,6 +343,14 @@ setM
   -> m f
 setM (DateTimeLensT l) v = runDateTimeLensT (A.set l . arr (v,))
 
+modifyM
+  :: (Functor m, Monad m, DateTime f)
+  => DateTimeLensT m (DateTimeComponents f) f a
+  -> (a -> a)
+  -> f
+  -> m f
+modifyM (DateTimeLensT l) v = runDateTimeLensT (A.modify l . arr (arr v,))
+
 get
   :: DateTime f
   => DateTimeLensT Identity (DateTimeComponents f) f a
@@ -354,6 +365,14 @@ set
   -> f
   -> f
 set l v = runIdentity . setM l v
+
+modify
+  :: DateTime f
+  => DateTimeLensT Identity (DateTimeComponents f) f a
+  -> (a -> a)
+  -> f
+  -> f
+modify l v = runIdentity . modifyM l v
 
 instance DateTime HT.UTCTime where
   type DateTimeZone HT.UTCTime = 'UTC
@@ -538,6 +557,11 @@ week
   => DateTimeLensT m c f Week
 week = datePart
 
+dayOfWeek
+  :: (Functor m, Monad m, DateTimePart c f DayOfWeek)
+  => DateTimeLensT m c f DayOfWeek
+dayOfWeek = datePart
+
 day
   :: (Functor m, Monad m, DateTimePart c f Day)
   => DateTimeLensT m c f Day
@@ -578,12 +602,12 @@ timeZoneOffset
   => DateTimeLensT m c f TimeZoneOffset
 timeZoneOffset = datePart
 
-getCurrentDateTime :: IO (UnixTime 'UTC)
-getCurrentDateTime = fmap mk getCurrentDateTimeNanos where
+getCurrentUnixTime :: IO (UnixTime 'UTC)
+getCurrentUnixTime = fmap mk getCurrentUnixTimeNanos where
   mk (UnixTimeNanos (s, _)) = UnixTime s
 
-getCurrentDateTimeNanos :: IO (UnixTimeNanos 'UTC)
-getCurrentDateTimeNanos = do
+getCurrentUnixTimeNanos :: IO (UnixTimeNanos 'UTC)
+getCurrentUnixTimeNanos = do
   C'timeval{c'timeval'tv_sec = sec, c'timeval'tv_usec = ms} <- getTimeOfDay
   return $! UnixTimeNanos (fromIntegral sec, fromIntegral (ms * 1000))
 
@@ -677,13 +701,6 @@ javaDateTimeToUTCDateTime :: Int64 -> UTCDateTime
 javaDateTimeToUTCDateTime = UTCDateTime . (`quot` 1000)
 
 foreign import ccall "time" c'time :: Ptr CTime -> IO CTime
-
-getCurrentDateTime :: IO UTCDateTime
-getCurrentDateTime = alloca (\ x -> c'time x >>= return . UTCDateTime . fromIntegral . fromEnum)
-
-getCurrentDateTimeNanos :: IO UTCDateTimeNanos
-getCurrentDateTimeNanos = getTimeOfDay >>= (\C'timeval { c'timeval'tv_sec = s,
-                                                         c'timeval'tv_usec = us } -> return $ UTCDateTimeNanos (fromIntegral $ s, fromIntegral $ us * 1000))
 
 today :: IO UTCDateTime
 today = do

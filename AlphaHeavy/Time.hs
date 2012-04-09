@@ -376,20 +376,33 @@ modify l v = runIdentity . modifyM l v
 
 instance DateTime HT.UTCTime where
   type DateTimeZone HT.UTCTime = 'UTC
-  -- type DateTimeComponents HT.UTCTime = (Hour, Minute, Second)
+  newtype DateTimeComponents HT.UTCTime = UTCTimeComponents{unUTCTimeComponents :: HT.UTCTime}
+  unpack = UTCTimeComponents
+  pack   = unUTCTimeComponents
 
-    -- g = undefined -- return . Day . fromIntegral . HT.toModifiedJulianDay . HT.utctDay
-    -- s = undefined
-
-instance DateTimePart HT.UTCTime HT.UTCTime Day where
+instance DateTimePart (DateTimeComponents HT.UTCTime) HT.UTCTime Day where
   dtg = return . Day . fromIntegral . HT.toModifiedJulianDay . HT.utctDay
   dts val s = return s{HT.utctDay = HT.ModifiedJulianDay . fromIntegral $ getDay val}
+
+instance DateTimePart (DateTimeComponents HT.UTCTime) Day Second where
+  dtg _ = fmap (Seconds . truncate) $ gets (HT.utctDayTime . unUTCTimeComponents)
+  dts val s = do
+    State.modify $ \ (UTCTimeComponents s) -> UTCTimeComponents s{HT.utctDayTime = realToFrac $ getSecond val}
+    return s
+
+blah x = truncate (x * 1000000000000)
+
+instance DateTimePart (DateTimeComponents HT.UTCTime) Day Pico where
+  dtg _ = fmap (Picos . blah) $ gets (HT.utctDayTime . unUTCTimeComponents)
+  -- dts val s = do
+    -- State.modify $ \ s -> s{HT.utctDayTime = realToFrac $ getSecond val}
+    -- return s
 
 instance DateTime (UnixTimeNanos tz) where
   type DateTimeZone (UnixTimeNanos tz) = tz
   newtype DateTimeComponents (UnixTimeNanos tz) = UnixTimeNanosComponents{unUnixTimeNanosComponents :: DateTimeStruct}
-  unpack   = UnixTimeNanosComponents . unpackUnixTimeNanos
-  pack     = packUnixTimeNanos . unUnixTimeNanosComponents
+  unpack = UnixTimeNanosComponents . unpackUnixTimeNanos
+  pack   = packUnixTimeNanos . unUnixTimeNanosComponents
 
 {-
 instance DateTimePart DateTimeStruct b Year where
@@ -856,10 +869,6 @@ instance Date UTCDate where
   weekOfWeekyear (UTCDate _) = error "weekOfWeekyear nyi"
   weekyear (UTCDate _)       = error "weekyear nyi"
 
-  -- withYear (UTCDate dt) (Year y) = cT2D $ withField (fromIntegral dt) (\x -> x { c'tm'tm_year = fromIntegral (y - 1900) })
-  -- withMonth (UTCDate dt) m       = cT2D $ withField (fromIntegral dt) (\x -> x { c'tm'tm_mon = fromIntegral $ (fromEnum m - 1) })
-  -- withDay (UTCDate dt) (Day d)   = cT2D $ withField (fromIntegral dt) (\x -> x { c'tm'tm_mday = fromIntegral d })
-
 instance Time UTCTime where
   hour (UTCTime x)        = Hour $ extract c'tm'tm_hour x
   millisOfDay (UTCTime _) = error "millisOfDay nyi"
@@ -869,10 +878,6 @@ instance Time UTCTime where
   secondOfDay (UTCTime _) = error "secondOfDay nyi"
   second (UTCTime x)      = Second $ extract c'tm'tm_sec x
   nanoseconds (UTCTime _) = Nanos 0
-
-  -- withHour (UTCTime dt) (Hour h)     = cT2T $ withField (fromIntegral dt) (\x -> x { c'tm'tm_hour = fromIntegral h })
-  -- withMinute (UTCTime dt) (Minute m) = cT2T $ withField (fromIntegral dt) (\x -> x { c'tm'tm_min = fromIntegral m })
-  -- withSecond (UTCTime dt) (Second s) = cT2T $ withField (fromIntegral dt) (\x -> x { c'tm'tm_sec = fromIntegral s })
 
 instance Date UTCDateTime where
   century _                      = Century 0
@@ -886,11 +891,6 @@ instance Date UTCDateTime where
   yearOfEra (UTCDateTime x)      = Year $ 1900 + extract c'tm'tm_year x
   weekOfWeekyear (UTCDateTime _) = error "weekOfWeekyear nyi"
   weekyear (UTCDateTime _)       = error "weekyear nyi"
-
-  -- withYear (UTCDateTime dt) (Year y) = cT2DT $ withField (fromIntegral dt) (\x -> x { c'tm'tm_year = fromIntegral (y - 1900) })
-  -- withMonth (UTCDateTime dt) m       = cT2DT $ withField (fromIntegral dt) (\x -> x { c'tm'tm_mon = fromIntegral $ (fromEnum m - 1) })
-  -- withDay (UTCDateTime dt) (Day d)   = cT2DT $ withField (fromIntegral dt) (\x -> x { c'tm'tm_mday = fromIntegral d })
-
 
 instance Date UTCDateTimeNanos where
   century _                               = Century 0

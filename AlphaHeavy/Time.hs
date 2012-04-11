@@ -6,12 +6,13 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeFamilies #-}
 
 -- |
--- Library that provides 4 corner simultaneous 24 hour Days that occur within a single 4 corner rotation of Earth.
+-- 4 corner simultaneous 24 hour Days that occur within a single 4 corner rotation of Earth.
 --
 module AlphaHeavy.Time
   ( DateTime(..)
@@ -19,14 +20,25 @@ module AlphaHeavy.Time
   , TimeZone(..)
   , TimeZoneOffset(..)
 
-  -- * Raw date components
-  , DateTimeComponents(..)
-  , DateTimeStruct(..)
-  , DateTimePart(..)
+  -- * Date storage
+  , UnixTime(..)
+  , UnixTimeNanos(..)
+  , JavaTime
+  , JulianDate
 
   -- * System time
   , getCurrentUnixTime
   , getCurrentUnixTimeNanos
+
+  -- * Time conversions
+  , convertDateTime
+  , convertDateTimeZone
+
+  -- * Raw date components
+  , DateTimeComponents(..)
+  , DateTimeStruct(..)
+  , DateTimePart(..)
+  , datePart
 
   -- * Lens accessors
   -- ** Pure
@@ -34,16 +46,27 @@ module AlphaHeavy.Time
   , AlphaHeavy.Time.set
   , AlphaHeavy.Time.modify
 
-  -- ** Monadic
+  -- ** Monadic (currently not very monadic...)
   , AlphaHeavy.Time.getM
+  , AlphaHeavy.Time.getM2
   , AlphaHeavy.Time.setM
   , AlphaHeavy.Time.modifyM
 
-  -- * Date storage
-  , UnixTime(..)
-  , UnixTimeNanos(..)
-  , JavaTime
-  , JulianDate
+  -- * Helper lenses
+  , year
+  , month
+  , monthOfYear
+  , week
+  , day
+  , dayOfWeek
+  , hour
+  , minute
+  , second
+  , milli
+  , nano
+  , pico
+
+  , timeZoneOffset
 
   -- * Date sections
   , Year(..)
@@ -59,18 +82,8 @@ module AlphaHeavy.Time
   , Nano(..)
   , Pico(..)
 
-  -- * Helper lenses
-  , year
-  , month
-  , monthOfYear
-  , week
-  , day
-  , hour
-  , minute
-  , second
-  , milli
-  , nano
-  , pico
+  -- * Durations
+  , Duration(..)
   ) where
 
 {-
@@ -308,16 +321,18 @@ class DateTime f where
   -- Repack a time from its components
   pack   :: DateTimeComponents f -> f
 
-class DateTimePart c f a where
-  -- |
-  -- A lens from a time into a time component
-  datePart :: (Functor m, Monad m) => DateTimeLensT m c f a
-  datePart = dateTimeLens dtg dts
+-- |
+-- A lens from a time into a time component
+datePart :: (Functor m, Monad m, DateTimePart c f a) => DateTimeLensT m c f a
+datePart = dateTimeLens dtg dts
 
+-- |
+-- Functions used to build a DateTimeLensT
+class DateTimePart c f a where
   dtg :: (Functor m, Monad m) => f -> StateT c m a
   dts :: (Functor m, Monad m) => a -> f -> StateT c m f
 
-newtype DateTimeLensT m c a b = DateTimeLensT{unDateTimeLens :: A.Lens (Kleisli (StateT c m)) a b}
+newtype DateTimeLensT m c f a = DateTimeLensT{unDateTimeLens :: A.Lens (Kleisli (StateT c m)) f a}
 
 deriving instance Monad m => Category (DateTimeLensT m c)
 
@@ -334,6 +349,16 @@ getM
   -> f
   -> m a
 getM = runDateTimeLensT . A.get . unDateTimeLens
+
+getM2
+  :: (Functor m, Monad m, DateTime f)
+  => (DateTimeLensT m (DateTimeComponents f) f a, DateTimeLensT m (DateTimeComponents f) f b)
+  -> f
+  -> m (a, b)
+getM2 (l1, l2) f = do
+  a <- runDateTimeLensT (A.get (unDateTimeLens l1)) f
+  b <- runDateTimeLensT (A.get (unDateTimeLens l2)) f
+  return (a, b)
 
 setM
   :: (Functor m, Monad m, DateTime f)
@@ -373,6 +398,18 @@ modify
   -> f
   -> f
 modify l v = runIdentity . modifyM l v
+
+convertDateTime
+  :: (DateTime f, DateTime t, DateTimeZone f ~ DateTimeZone t)
+  => f
+  -> Maybe t
+convertDateTime = undefined
+
+convertDateTimeZone
+  :: (DateTime f, DateTime t)
+  => f
+  -> IO t
+convertDateTimeZone = undefined
 
 instance DateTime HT.UTCTime where
   type DateTimeZone HT.UTCTime = 'UTC
@@ -438,6 +475,10 @@ instance DateTimePart (DateTimeComponents (UnixTimeNanos tz)) (UnixTimeNanos tz)
     State.put (UnixTimeNanosComponents s')
     return $ undefined -- dt_year . unpack . pack $ UnixTimeNanosComponents s'
 
+instance DateTimePart (DateTimeComponents (UnixTimeNanos tz)) (UnixTimeNanos tz) Second where
+  dtg (UnixTimeNanos (s, _)) = return $! Seconds (fromIntegral s)
+  dts val x = undefined
+
 instance DateTimePart (DateTimeComponents (UnixTimeNanos tz)) Year Month where
   dtg _   = State.gets (dt_month . unUnixTimeNanosComponents)
   dts val x = do
@@ -461,6 +502,15 @@ instance DateTimePart (DateTimeComponents (UnixTimeNanos tz)) Day Hour where
     let s' = s{dt_hour = val}
     State.put (UnixTimeNanosComponents s')
     return $ undefined -- dt_year . unpack . pack $ UnixTimeNanosComponents s'
+
+instance DateTimePart (DateTimeComponents (UnixTimeNanos tz)) Day Minute where
+  dtg _ = do
+    h <- State.gets (getHour . dt_hour . unUnixTimeNanosComponents)
+    m <- State.gets (getMinute . dt_minute . unUnixTimeNanosComponents)
+    return $! Minutes (h * 60 + m)
+
+  dts val x = do
+    undefined
 
 instance DateTimePart (DateTimeComponents (UnixTimeNanos tz)) Hour Minute where
   dtg _   = State.gets (dt_minute . unUnixTimeNanosComponents)
@@ -623,6 +673,19 @@ getCurrentUnixTimeNanos :: IO (UnixTimeNanos 'UTC)
 getCurrentUnixTimeNanos = do
   C'timeval{c'timeval'tv_sec = sec, c'timeval'tv_usec = ms} <- getTimeOfDay
   return $! UnixTimeNanos (fromIntegral sec, fromIntegral (ms * 1000))
+
+class Duration (a :: *)
+
+instance Duration Year
+instance Duration Month
+instance Duration Week
+instance Duration Day
+instance Duration Hour
+instance Duration Minute
+instance Duration Second
+instance Duration Milli
+instance Duration Nano
+instance Duration Pico
 
 {-
 newtype Duration = Duration Int64 deriving (Show,Num,Eq,NFData)

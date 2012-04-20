@@ -12,7 +12,6 @@
 {-# LANGUAGE TypeFamilies #-}
 
 -- |
--- 4 corner simultaneous 24 hour Days that occur within a single 4 corner rotation of Earth.
 --
 module AlphaHeavy.Time
   ( DateTime(..)
@@ -53,6 +52,9 @@ module AlphaHeavy.Time
   , AlphaHeavy.Time.modifyM
 
   -- * Helper lenses
+  , epoch
+  , era
+  , century
   , year
   , month
   , monthOfYear
@@ -69,6 +71,8 @@ module AlphaHeavy.Time
   , timeZoneOffset
 
   -- * Date sections
+  , Era(..)
+  , Century(..)
   , Year(..)
   , Month(..)
   , MonthOfYear(..)
@@ -931,16 +935,6 @@ instance Date UTCDate where
   yearOfEra (UTCDate x)      = Year $ extract c'tm'tm_year x
   weekOfWeekyear (UTCDate _) = error "weekOfWeekyear nyi"
   weekyear (UTCDate _)       = error "weekyear nyi"
-
-instance Time UTCTime where
-  hour (UTCTime x)        = Hour $ extract c'tm'tm_hour x
-  millisOfDay (UTCTime _) = error "millisOfDay nyi"
-  millis (UTCTime _)      = Millis 0
-  minuteOfDay (UTCTime x) = Minute $ extract c'tm'tm_min x + (extract c'tm'tm_hour x * 60)
-  minute (UTCTime x)      = Minute $ extract c'tm'tm_min x
-  secondOfDay (UTCTime _) = error "secondOfDay nyi"
-  second (UTCTime x)      = Second $ extract c'tm'tm_sec x
-  nanoseconds (UTCTime _) = Nanos 0
 
 instance Date UTCDateTime where
   century _                      = Century 0

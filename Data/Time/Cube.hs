@@ -193,52 +193,6 @@ today = do
     Just val -> return $! val
     Nothing  -> error "conversion failed"
 
-createUTCDateTime :: Second -> Minute -> Hour -> Day -> Month -> Year -> UTCDateTime
-createUTCDateTime s m h d mon y = createDateTime s m h d mon y 0
-
-createDateTime :: Second -> Minute -> Hour -> Day -> Month -> Year -> Int -> UTCDateTime
-{-# INLINE createDateTime #-}
-createDateTime (Second s) (Minute m) (Hour h) (Day d) mon (Year y) off =
-  if y >= 1970 then UTCDateTime $ fromIntegral $ fromEnum ctime -- Note: There is an edgecase where the timezone off will push the date before 1970
-  else error "createDateTime: Years before 1970 are not supported"
-  where ctime :: CTime -- Apply the offset directly to the Hours/Minutes/Seconds because timegm ignores the offset member
-        ctime = {-# SCC "ctime" #-}(convert $ C'tm (cint $ s - soff) (cint $ m - moff) (cint $ h - hoff) (cint d) cmon (cint $ y - 1900) 0 0 (-1) 0 nullPtr) :: CTime
-        cmon = {-# SCC "cmon" #-}cint $ ((fromIntegral $ fromEnum mon) :: Int32) - 1
-        cint :: (Integral a) => a -> CInt
-        cint = {-# SCC "cint" #-}fromIntegral
-        off32 = fromIntegral off
-        (hoff, mofftot) = {-# SCC "hoff" #-}off32 `divMod` 3600
-        (moff, soff) = {-# SCC "moff/soff" #-}mofftot `divMod` 60
-
-createLocalDateTime :: Second -> Minute -> Hour -> Day -> Month -> Year -> IO UTCDateTime
-createLocalDateTime (Second s) (Minute m) (Hour h) (Day d) mon (Year y) =
-  if y >= 1970 then do
-    ctime <- convertLocal tm
-    return $ UTCDateTime $ fromIntegral $ fromEnum ctime
-  -- Note: There is an edgecase where the local timezone offset will push the date before 1970
-  else error "createLocalDateTime: Years before 1970 are not supported"
-  where tm = C'tm (cint s) (cint m) (cint h) (cint d) cmon (cint $ y - 1900) 0 0 (-1) 0 nullPtr
-        cmon = cint $ ((fromIntegral $ fromEnum mon) :: Int32) - 1
-        cint :: Integral a => a -> CInt
-        cint = fromIntegral
-        convertLocal tm' = with tm' (\tm_ptr -> c'mktime tm_ptr)
-
-createUTCDateTimeNanos :: Millis -> Second -> Minute -> Hour -> Day -> Month -> Year -> UTCDateTimeNanos
-createUTCDateTimeNanos ms s m h d mon y = createDateTimeNanos ms s m h d mon y 0
-
-createDateTimeNanos :: Millis -> Seconds -> Minutes -> Hours -> Day -> Month -> Year -> Int -> UTCDateTimeNanos
-createDateTimeNanos (Millis ms) (Seconds s) (Minutes m) (Hours h) (Day d) mon (Year y) off =
-  if y >= 1970 then UTCDateTimeNanos (fromIntegral $ fromEnum ctime, fromIntegral $ ms * 1000000)
-  else error "createDateTimeNanos: Years before 1970 are not supported"
-  where ctime :: CTime -- Apply the offset directly to the Hours/Minutes/Seconds because timegm ignores the offset member
-        ctime = (convert $ C'tm (cint $ s - soff) (cint $ m - moff) (cint $ h - hoff) (cint d) cmon (cint $ y - 1900) 0 0 (-1) 0 nullPtr) :: CTime
-        cmon = cint $ ((fromIntegral $ fromEnum mon) :: Int32) - 1
-        cint :: (Integral a) => a -> CInt
-        cint = fromIntegral
-        off32 = fromIntegral off
-        (hoff, mofftot) = off32 `divMod` 3600
-        (moff, soff) = mofftot `divMod` 60
-
 toHaskellLocalTime :: UTCDateTime -> HT.LocalTime
 toHaskellLocalTime dt = HT.LocalTime (fromJust $ HT.fromGregorianValid (fromIntegral $ year dt) (fromEnum $ month dt) (fromIntegral $ day dt)) $
                                      HT.TimeOfDay (fromIntegral $ hour dt) (fromIntegral $ minute dt) (fromIntegral $ second dt)
@@ -291,17 +245,6 @@ fromUTCToTimezone' tz dt = fromHaskellLocalTime $ utcToLocalTime' tz $ toHaskell
 
 addDateTime :: UTCDate -> UTCTime -> UTCDateTime
 addDateTime (UTCDate d) (UTCTime t) = UTCDateTime (d + t)
-
-floorToInterval :: Int -> UTCDateTimeNanos -> UTCDateTimeNanos
-floorToInterval maxInterval (UTCDateTimeNanos (s, ns)) = UTCDateTimeNanos (s, ns `div` maxIntNs * maxIntNs) where
-  maxIntNs = fromIntegral maxInterval * 1000000
-
-addMillis :: UTCDateTimeNanos -> Millis -> UTCDateTimeNanos
-addMillis (UTCDateTimeNanos (s, ns)) ms = UTCDateTimeNanos (s + s', fromIntegral ns') where
-  (s', ns') = (fromIntegral ns + fromIntegral ms * 1000000) `divMod` 1000000000
-
-deltaInMillis :: UTCDateTimeNanos -> UTCDateTimeNanos -> Millis
-deltaInMillis (UTCDateTimeNanos (s1, ns1)) (UTCDateTimeNanos (s2, ns2)) = fromIntegral ((s1 - s2) * 1000000) + fromIntegral ((ns1 - ns2) `div` 1000)
 
 extract :: (C'tm -> CInt) -> Int64 -> Int32
 extract fn val = unsafePerformIO $ do

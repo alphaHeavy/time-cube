@@ -28,6 +28,16 @@ module Data.Time.Cube.UnixTime
 
   -- * Raw date components
   , DateTimeStruct(..)
+
+  -- * Legacy helper functions
+  , floorToInterval
+  , addMillis
+  , deltaInMillis
+  , createUTCDateTime
+  , createDateTime
+  , createLocalDateTime
+  , createUTCDateTimeNanos
+  , createDateTimeNanos
   ) where
 
 import Data.Time.Cube.TM
@@ -37,7 +47,7 @@ import Control.DeepSeq
 import Control.Monad.State.Lazy as State
 import Data.Convertible
 import Data.Int
-import Foreign (nullPtr)
+import Foreign (nullPtr, with)
 import Foreign.C.Types
 import Control.Category ((.))
 import Prelude hiding ((.), id)
@@ -243,4 +253,62 @@ getCurrentUnixTimeNanos :: IO (UnixTimeNanos 'UTC)
 getCurrentUnixTimeNanos = do
   C'timeval{c'timeval'tv_sec = sec, c'timeval'tv_usec = ms} <- getTimeOfDay
   return $! UnixTimeNanos (fromIntegral sec, fromIntegral (ms * 1000))
+
+
+floorToInterval :: Int -> UnixTimeNanos tz -> UnixTimeNanos tz
+floorToInterval maxInterval (UnixTimeNanos (s, ns)) = UnixTimeNanos (s, ns `div` maxIntNs * maxIntNs) where
+  maxIntNs = fromIntegral maxInterval * 1000000
+
+addMillis :: UnixTimeNanos tz -> Milli -> UnixTimeNanos tz
+addMillis (UnixTimeNanos (s, ns)) (Millis ms) = UnixTimeNanos (s + s', fromIntegral ns') where
+  (s', ns') = (fromIntegral ns + fromIntegral ms * 1000000) `divMod` 1000000000
+
+deltaInMillis :: UnixTimeNanos tz -> UnixTimeNanos tz -> Milli
+deltaInMillis (UnixTimeNanos (s1, ns1)) (UnixTimeNanos (s2, ns2)) = fromIntegral ((s1 - s2) * 1000000) + fromIntegral ((ns1 - ns2) `div` 1000)
+
+createUTCDateTime :: Second -> Minute -> Hour -> Day -> Month -> Year -> UnixTime 'UTC
+createUTCDateTime s m h d mon y = let UnixTime x = createDateTime s m h d mon y 0 in UnixTime x
+
+createDateTime :: Second -> Minute -> Hour -> Day -> Month -> Year -> Int -> UnixTime 'LocalTime
+{-# INLINE createDateTime #-}
+createDateTime (Seconds s) (Minutes m) (Hours h) (Day d) mon (Years y) off =
+  if y >= 1970 then UnixTime $ fromIntegral (fromEnum ctime) -- Note: There is an edgecase where the timezone off will push the date before 1970
+  else error "createDateTime: Years before 1970 are not supported"
+  where ctime :: CTime -- Apply the offset directly to the Hours/Minutes/Seconds because timegm ignores the offset member
+        ctime = {-# SCC "ctime" #-}(convert $ C'tm (cint $ s - soff) (cint $ m - moff) (cint $ h - hoff) (cint d) cmon (cint $ y - 1900) 0 0 (-1) 0 nullPtr) :: CTime
+        cmon = {-# SCC "cmon" #-}cint $ (getMonth mon) - 1
+        cint :: (Integral a) => a -> CInt
+        cint = {-# SCC "cint" #-}fromIntegral
+        off32 = fromIntegral off
+        (hoff, mofftot) = {-# SCC "hoff" #-}off32 `divMod` 3600
+        (moff, soff) = {-# SCC "moff/soff" #-}mofftot `divMod` 60
+
+createLocalDateTime :: Second -> Minute -> Hour -> Day -> Month -> Year -> IO (UnixTime 'LocalTime)
+createLocalDateTime (Seconds s) (Minutes m) (Hours h) (Day d) mon (Years y) =
+  if y >= 1970 then do
+    ctime <- convertLocal tm
+    return $! UnixTime $ fromIntegral (fromEnum ctime)
+  -- Note: There is an edgecase where the local timezone offset will push the date before 1970
+  else error "createLocalDateTime: Years before 1970 are not supported"
+  where tm = C'tm (cint s) (cint m) (cint h) (cint d) cmon (cint $ y - 1900) 0 0 (-1) 0 nullPtr
+        cmon = cint $ (getMonth mon) - 1
+        cint :: Integral a => a -> CInt
+        cint = fromIntegral
+        convertLocal tm' = with tm' (\tm_ptr -> c'mktime tm_ptr)
+
+createUTCDateTimeNanos :: Milli -> Second -> Minute -> Hour -> Day -> Month -> Year -> UnixTimeNanos 'UTC
+createUTCDateTimeNanos ms s m h d mon y = createDateTimeNanos ms s m h d mon y 0
+
+createDateTimeNanos :: Milli -> Second -> Minute -> Hour -> Day -> Month -> Year -> Int -> UnixTimeNanos 'UTC
+createDateTimeNanos (Millis ms) (Seconds s) (Minutes m) (Hours h) (Day d) mon (Years y) off =
+  if y >= 1970 then UnixTimeNanos (fromIntegral $ fromEnum ctime, fromIntegral $ ms * 1000000)
+  else error "createDateTimeNanos: Years before 1970 are not supported"
+  where ctime :: CTime -- Apply the offset directly to the Hours/Minutes/Seconds because timegm ignores the offset member
+        ctime = (convert $ C'tm (cint $ s - soff) (cint $ m - moff) (cint $ h - hoff) (cint d) cmon (cint $ y - 1900) 0 0 (-1) 0 nullPtr) :: CTime
+        cmon = cint $ (getMonth mon) - 1
+        cint :: (Integral a) => a -> CInt
+        cint = fromIntegral
+        off32 = fromIntegral off
+        (hoff, mofftot) = off32 `divMod` 3600
+        (moff, soff) = mofftot `divMod` 60
 

@@ -7,8 +7,11 @@ Cabal-version:       >= 1.10
 
 Library
   Default-Language:  Haskell2010
-  Exposed-modules:   AlphaHeavy.Time
-  Other-modules:     AlphaHeavy.Time.TM
+  Exposed-modules:   Data.Time.Cube
+  Other-modules:     Data.Time.Cube.Lens
+                     Data.Time.Cube.Types
+                     Data.Time.Cube.TM
+                     Data.Time.Cube.UnixTime
   Build-depends:     base         >= 4.5    && < 5,
                      bindings-DSL >= 1.0.11 && < 1.1,
                      convertible  == 1.0.*,

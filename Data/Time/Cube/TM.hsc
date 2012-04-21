@@ -4,7 +4,7 @@
 #include <time.h>
 #include <sys/time.h>
 
-module AlphaHeavy.Time.TM where
+module Data.Time.Cube.TM where
 
 import Data.Convertible
 import Foreign.C.String

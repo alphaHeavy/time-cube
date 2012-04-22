@@ -27,9 +27,9 @@ module Data.Time.Cube.Label
   , Data.Time.Cube.Label.modifyM
 
   -- * Helper lenses
-  -- , epoch
-  -- , era
-  -- , century
+  , epoch
+  , era
+  , century
   , year
   , month
   , monthOfYear
@@ -132,6 +132,21 @@ modify
   -> f
   -> f
 modify l v = runIdentity . modifyM l v
+
+epoch
+  :: (Functor m, Monad m, DateTimePart c f Epoch)
+  => DateTimeLensT m c f Epoch
+epoch = datePart
+
+era
+  :: (Functor m, Monad m, DateTimePart c f Era)
+  => DateTimeLensT m c f Era
+era = datePart
+
+century
+  :: (Functor m, Monad m, DateTimePart c f Century)
+  => DateTimeLensT m c f Century
+century = datePart
 
 year
   :: (Functor m, Monad m, DateTimePart c f Year)

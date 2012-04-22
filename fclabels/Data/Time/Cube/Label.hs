@@ -8,7 +8,7 @@
 
 -- |
 --
-module Data.Time.Cube.Lens
+module Data.Time.Cube.Label
   ( DateTimeLensT(..)
 
   -- * Raw date components
@@ -16,15 +16,15 @@ module Data.Time.Cube.Lens
 
   -- * Lens accessors
   -- ** Pure
-  , Data.Time.Cube.Lens.get
-  , Data.Time.Cube.Lens.set
-  , Data.Time.Cube.Lens.modify
+  , Data.Time.Cube.Label.get
+  , Data.Time.Cube.Label.set
+  , Data.Time.Cube.Label.modify
 
   -- ** Monadic (currently not very monadic...)
-  , Data.Time.Cube.Lens.getM
-  , Data.Time.Cube.Lens.getM2
-  , Data.Time.Cube.Lens.setM
-  , Data.Time.Cube.Lens.modifyM
+  , Data.Time.Cube.Label.getM
+  , Data.Time.Cube.Label.getM2
+  , Data.Time.Cube.Label.setM
+  , Data.Time.Cube.Label.modifyM
 
   -- * Helper lenses
   -- , epoch
@@ -46,14 +46,13 @@ module Data.Time.Cube.Lens
   , timeZoneOffset
   ) where
 
-import Data.Time.Cube.Types
+import Data.Time.Cube
 import Control.Arrow (Kleisli(..), runKleisli, arr)
 import Control.Category
 import Control.Monad
 import Control.Monad.Identity
 import Control.Monad.State.Lazy as State
 import Data.Label.Abstract as A
-import qualified Data.Time as HT
 import Prelude hiding ((.), id)
 
 dateTimeLens

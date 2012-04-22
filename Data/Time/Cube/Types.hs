@@ -19,6 +19,7 @@ module Data.Time.Cube.Types
   , convertDateTimeZone
 
   -- * Date sections
+  , Epoch
   , Era(..)
   , Century(..)
   , Year(..)
@@ -35,7 +36,7 @@ module Data.Time.Cube.Types
   , Pico(..)
 
   -- * Durations
-  , Duration(..)
+  , Duration
   ) where
 
 import Control.DeepSeq
@@ -44,6 +45,10 @@ import Control.Monad.State.Lazy as State
 import Data.Int
 import Data.Data
 import Prelude hiding ((.), id)
+
+-- |
+-- Compute relative times since the epoch
+data Epoch
 
 newtype Era     = Era     {getEra     :: Int32}
 newtype Century = Century {getCentury :: Int32}
@@ -197,7 +202,7 @@ class DateTime f where
 
 
 -- |
--- Functions used to build a DateTimeLensT
+-- Functions used to build lenses
 class DateTimePart c f a where
   dtg :: (Functor m, Monad m) => f -> StateT c m a
   dts :: (Functor m, Monad m) => a -> f -> StateT c m f

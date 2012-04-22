@@ -2,6 +2,10 @@ Name:                time-cube-fclabels
 Version:             0.1
 License:             BSD3
 License-File:        LICENSE
+author:              Nathan Howell <nhowell@alphaheavy.com>
+maintainer:          Nathan Howell <nhowell@alphaheavy.com>
+homepage:            http://github.com/alphaHeavy/time-cube
+bug-reports:         http://github.com/alphaHeavy/time-cube/issues
 Build-type:          Simple
 Cabal-version:       >= 1.10
 
@@ -9,8 +13,12 @@ Library
   Default-Language:  Haskell2010
   Exposed-modules:   Data.Time.Cube.Label
   Build-depends:     base         >= 4.5    && < 5,
-                     fclabels     >= 1.0,
+                     fclabels     >= 1.0    && < 1.2,
                      mtl          == 2.*,
                      time-cube    == 0.1.*
   GHC-Options:       -Wall -auto-all
+
+Source-Repository head
+  type:     git
+  location: https://github.com/alphaHeavy/time-cube.git
 

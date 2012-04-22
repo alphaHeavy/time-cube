@@ -1,16 +1,3 @@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE TypeFamilies #-}
-
 -- |
 --
 module Data.Time.Cube
@@ -33,43 +20,11 @@ module Data.Time.Cube
   , convertDateTimeZone
 
   -- * Raw date components
-  , DateTimeComponents
   , DateTimeStruct(..)
   , DateTimePart(..)
-  -- , datePart
-
-  -- * Lens accessors
-  -- ** Pure
-  -- , Data.Time.Cube.get
-  -- , Data.Time.Cube.set
-  -- , Data.Time.Cube.modify
-
-  -- ** Monadic (currently not very monadic...)
-  -- , Data.Time.Cube.getM
-  -- , Data.Time.Cube.getM2
-  -- , Data.Time.Cube.setM
-  -- , Data.Time.Cube.modifyM
-
-  -- * Helper lenses
-  -- , epoch
-  -- , era
-  -- , century
-  -- , year
-  -- , month
-  -- , monthOfYear
-  -- , week
-  -- , day
-  -- , dayOfWeek
-  -- , hour
-  -- , minute
-  -- , second
-  -- , milli
-  -- , nano
-  -- , pico
-
-  -- , timeZoneOffset
 
   -- * Date sections
+  , Epoch
   , Era(..)
   , Century(..)
   , Year(..)
@@ -267,60 +222,4 @@ cT2DT = UTCDateTime . fromIntegral . fromEnum
 cT2DTm :: CTime -> Int32 -> UTCDateTimeNanos
 cT2DTm ct ns = UTCDateTimeNanos (fromIntegral $ fromEnum ct, ns)
 
-instance Date UTCDate where
-  century _                  = DlM.lens (\ _ -> return False) (\ _ _ -> return False) -- (Century 0
-  day (UTCDate x)            = Day $ extract c'tm'tm_mday x
-  dayOfWeek (UTCDate x)      = toEnum $ fromIntegral $ extract c'tm'tm_wday x
-  dayOfYear (UTCDate x)      = Day $ extract c'tm'tm_yday x
-  era _                      = Era 1 -- AD
-  month (UTCDate x)          = toEnum $ fromIntegral $ extract c'tm'tm_mon x
-  year (UTCDate x)           = Year $ extract c'tm'tm_year x
-  yearOfCentury (UTCDate x)  = Year $ extract c'tm'tm_year x `mod` 100
-  yearOfEra (UTCDate x)      = Year $ extract c'tm'tm_year x
-  weekOfWeekyear (UTCDate _) = error "weekOfWeekyear nyi"
-  weekyear (UTCDate _)       = error "weekyear nyi"
-
-instance Date UTCDateTime where
-  century _                      = Century 0
-  day (UTCDateTime x)            = Day $ extract c'tm'tm_mday x
-  dayOfWeek (UTCDateTime x)      = toEnum $ fromIntegral $ extract c'tm'tm_wday x
-  dayOfYear (UTCDateTime x)      = Day $ extract c'tm'tm_yday x
-  era _                          = Era 1 -- AD
-  month (UTCDateTime x)          = toEnum $ fromIntegral $ 1 + extract c'tm'tm_mon x
-  year (UTCDateTime x)           = Year $ 1900 + extract c'tm'tm_year x
-  yearOfCentury (UTCDateTime x)  = Year $ extract c'tm'tm_year x `mod` 100
-  yearOfEra (UTCDateTime x)      = Year $ 1900 + extract c'tm'tm_year x
-  weekOfWeekyear (UTCDateTime _) = error "weekOfWeekyear nyi"
-  weekyear (UTCDateTime _)       = error "weekyear nyi"
-
-instance Date UTCDateTimeNanos where
-  century _                               = Century 0
-  day (UTCDateTimeNanos (x,_))            = day (UTCDateTime x)
-  dayOfWeek (UTCDateTimeNanos (x,_))      = dayOfWeek (UTCDateTime x)
-  dayOfYear (UTCDateTimeNanos (x,_))      = dayOfYear (UTCDateTime x)
-  era _                                   = Era 1 -- AD
-  month (UTCDateTimeNanos (x,_))          = month (UTCDateTime x)
-  year (UTCDateTimeNanos (x,_))           = year (UTCDateTime x)
-  yearOfCentury (UTCDateTimeNanos (x,_))  = yearOfCentury (UTCDateTime x)
-  yearOfEra (UTCDateTimeNanos (x,_))      = yearOfEra (UTCDateTime x)
-  weekOfWeekyear (UTCDateTimeNanos (x,_)) = weekOfWeekyear (UTCDateTime x)
-  weekyear (UTCDateTimeNanos (x,_))       = weekyear (UTCDateTime x)
-
-  -- withYear (UTCDateTimeNanos (dt, ms)) (Year y) = cT2DTm (withField (fromIntegral dt) (\x -> x { c'tm'tm_year = fromIntegral (y - 1900) })) ms
-  -- withMonth (UTCDateTimeNanos (dt, ms)) m       = cT2DTm (withField (fromIntegral dt) (\x -> x { c'tm'tm_mon = fromIntegral $ (fromEnum m - 1) })) ms
-  -- withDay (UTCDateTimeNanos (dt, ms)) (Day d)   = cT2DTm (withField (fromIntegral dt) (\x -> x { c'tm'tm_mday = fromIntegral d })) ms
-
-instance Time UTCDateTimeNanos where
-  hour (UTCDateTimeNanos (x,_))        = hour (UTCDateTime x)
-  millisOfDay (UTCDateTimeNanos (x,n)) = Millis $ fromIntegral (getSecond (secondOfDay (UTCDateTime x))) * 1000 + (fromIntegral n `div` 1000000)
-  millis (UTCDateTimeNanos (_,x))      = Millis $ fromIntegral x `div` 1000000
-  minuteOfDay (UTCDateTimeNanos (x,_)) = minuteOfDay (UTCDateTime x)
-  minute (UTCDateTimeNanos (x,_))      = minute (UTCDateTime x)
-  secondOfDay (UTCDateTimeNanos (x,_)) = secondOfDay (UTCDateTime x)
-  second (UTCDateTimeNanos (x,_))      = second (UTCDateTime x)
-  nanoseconds (UTCDateTimeNanos (_,x)) = Nanos $ fromIntegral x `mod` 1000000
-
-  -- withHour (UTCDateTimeNanos (dt, ms)) (Hour h)     = cT2DTm (withField (fromIntegral dt) (\x -> x { c'tm'tm_hour = fromIntegral h })) ms
-  -- withMinute (UTCDateTimeNanos (dt, ms)) (Minute m) = cT2DTm (withField (fromIntegral dt) (\x -> x { c'tm'tm_min = fromIntegral m })) ms
-  -- withSecond (UTCDateTimeNanos (dt, ms)) (Second s) = cT2DTm (withField (fromIntegral dt) (\x -> x { c'tm'tm_sec = fromIntegral s })) ms
 -}

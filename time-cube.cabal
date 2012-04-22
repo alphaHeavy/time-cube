@@ -14,7 +14,6 @@ Library
                      Data.Time.Cube.UnixTime
   Build-depends:     base         >= 4.5    && < 5,
                      bindings-DSL >= 1.0.11 && < 1.1,
-                     convertible  == 1.0.*,
                      deepseq      == 1.3.*,
                      fclabels     >= 1.0,
                      mtl          == 2.*,

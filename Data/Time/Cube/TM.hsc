@@ -6,7 +6,6 @@
 
 module Data.Time.Cube.TM where
 
-import Data.Convertible
 import Foreign.C.String
 import Foreign.C.Types
 import Foreign.Ptr
@@ -54,17 +53,20 @@ import Foreign.Storable
 #ccall mktime , Ptr <tm> -> IO CTime
 #ccall gettimeofday , Ptr <timeval> -> Ptr <timezone> -> IO CInt
 
-instance Convertible CTime C'tm where
-  safeConvert ctime = Right (unsafeLocalState conv)
+class ConvertTime a b where
+  convertTime :: a -> b
+
+instance ConvertTime CTime C'tm where
+  convertTime ctime = unsafeLocalState conv
     where conv = with ctime (\ ctime' -> alloca (\ tm -> c'gmtime_r ctime' tm >>= peek))
 
-instance Convertible C'tm CTime where
-  safeConvert tm = Right (unsafeLocalState conv)
+instance ConvertTime C'tm CTime where
+  convertTime tm = unsafeLocalState conv
     where conv = with tm (\tm_ptr -> c'timegm tm_ptr)
 
 withField :: CTime -> (C'tm -> C'tm) -> CTime
-withField ct setf = let tm = convert ct :: C'tm
-               in convert $ setf tm
+withField ct setf = let tm = convertTime ct :: C'tm
+               in convertTime $ setf tm
 
 getTimeOfDay :: IO C'timeval
 getTimeOfDay = alloca (\tmptr -> c'gettimeofday tmptr nullPtr >>= getResult tmptr)

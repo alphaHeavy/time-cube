@@ -41,11 +41,9 @@ module Data.Time.Cube.UnixTime
   ) where
 
 import Data.Time.Cube.TM
-import Data.Time.Cube.Lens
 import Data.Time.Cube.Types
 import Control.DeepSeq
 import Control.Monad.State.Lazy as State
-import Data.Convertible
 import Data.Int
 import Foreign (nullPtr, with)
 import Foreign.C.Types
@@ -224,14 +222,14 @@ unpackUnixTime (UnixTime s) = val where
   hour   = Hours   . fromIntegral $ c'tm'tm_hour tm
   minute = Minutes . fromIntegral $ c'tm'tm_min  tm
   second = Seconds . fromIntegral $ c'tm'tm_sec  tm
-  tm     = convert (fromIntegral s :: CTime)
+  tm     = convertTime (fromIntegral s :: CTime)
 
 packUnixTime :: DateTimeStruct -> UnixTime tz
 packUnixTime DateTimeStruct{..} = UnixTime (fromIntegral val') where
   val' :: Int
-  val' = convert val
+  val' = let CTime x = val in fromIntegral x
   val :: CTime
-  val = convert C'tm
+  val = convertTime C'tm
     { c'tm'tm_year   = fromIntegral $ getYear   dt_year  - 1900
     , c'tm'tm_mon    = fromIntegral $ getMonth  dt_month - 1
     , c'tm'tm_mday   = fromIntegral $ getDay    dt_day
@@ -275,7 +273,7 @@ createDateTime (Seconds s) (Minutes m) (Hours h) (Day d) mon (Years y) off =
   if y >= 1970 then UnixTime $ fromIntegral (fromEnum ctime) -- Note: There is an edgecase where the timezone off will push the date before 1970
   else error "createDateTime: Years before 1970 are not supported"
   where ctime :: CTime -- Apply the offset directly to the Hours/Minutes/Seconds because timegm ignores the offset member
-        ctime = {-# SCC "ctime" #-}(convert $ C'tm (cint $ s - soff) (cint $ m - moff) (cint $ h - hoff) (cint d) cmon (cint $ y - 1900) 0 0 (-1) 0 nullPtr) :: CTime
+        ctime = {-# SCC "ctime" #-}(convertTime $ C'tm (cint $ s - soff) (cint $ m - moff) (cint $ h - hoff) (cint d) cmon (cint $ y - 1900) 0 0 (-1) 0 nullPtr) :: CTime
         cmon = {-# SCC "cmon" #-}cint $ (getMonth mon) - 1
         cint :: (Integral a) => a -> CInt
         cint = {-# SCC "cint" #-}fromIntegral
@@ -304,7 +302,7 @@ createDateTimeNanos (Millis ms) (Seconds s) (Minutes m) (Hours h) (Day d) mon (Y
   if y >= 1970 then UnixTimeNanos (fromIntegral $ fromEnum ctime, fromIntegral $ ms * 1000000)
   else error "createDateTimeNanos: Years before 1970 are not supported"
   where ctime :: CTime -- Apply the offset directly to the Hours/Minutes/Seconds because timegm ignores the offset member
-        ctime = (convert $ C'tm (cint $ s - soff) (cint $ m - moff) (cint $ h - hoff) (cint d) cmon (cint $ y - 1900) 0 0 (-1) 0 nullPtr) :: CTime
+        ctime = (convertTime $ C'tm (cint $ s - soff) (cint $ m - moff) (cint $ h - hoff) (cint d) cmon (cint $ y - 1900) 0 0 (-1) 0 nullPtr) :: CTime
         cmon = cint $ (getMonth mon) - 1
         cint :: (Integral a) => a -> CInt
         cint = fromIntegral

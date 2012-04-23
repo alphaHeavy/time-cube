@@ -18,6 +18,7 @@ module Data.Time.Cube
   -- * Time conversions
   , convertDateTime
   , convertDateTimeZone
+  , convertTimeZone
 
   -- * Raw date components
   , DateTimeStruct(..)
@@ -46,6 +47,7 @@ module Data.Time.Cube
 
 import Prelude hiding ((.), id)
 
+import Data.Time.Cube.TimeZone
 import Data.Time.Cube.Types
 import Data.Time.Cube.UnixTime
 

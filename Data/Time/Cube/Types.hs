@@ -16,7 +16,6 @@ module Data.Time.Cube.Types
 
   -- * Time conversions
   , convertDateTime
-  , convertDateTimeZone
 
   -- * Date sections
   , Epoch
@@ -179,7 +178,8 @@ deriving instance Show   Pico
 deriving instance Num    Pico
 deriving instance NFData Pico
 
-data TimeZone = UTC | LocalTime -- NamedTimeZone String
+data TimeZone = UTC | LocalTime | USEastern | USPacific -- | forall a . TimeZone a
+  deriving (Show, Eq, Ord)
 
 class DateTime f where
   -- |
@@ -212,12 +212,6 @@ convertDateTime
   => f
   -> Maybe t
 convertDateTime = undefined
-
-convertDateTimeZone
-  :: (DateTime f, DateTime t)
-  => f
-  -> IO t
-convertDateTimeZone = undefined
 
 class Duration (a :: *)
 

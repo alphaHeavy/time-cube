@@ -18,10 +18,6 @@ module Data.Time.Cube.UnixTime
   , getCurrentUnixTime
   , getCurrentUnixTimeNanos
 
-  -- * Time conversions
-  , convertDateTime
-  , convertDateTimeZone
-
   -- * Raw date components
   , DateTimeStruct(..)
 
